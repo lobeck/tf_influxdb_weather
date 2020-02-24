@@ -33,10 +33,11 @@ client = None
 
 class OutdoorSensorExporter:
 
-    def __init__(self, host, port, callback):
+    def __init__(self, host, port, led_config, callback):
         if port is None:
             port = 4223
 
+        self.led_config = led_config
         self.callback = callback
         # Create IP Connection
         self.ipcon = IPConnection()
@@ -67,6 +68,7 @@ class OutdoorSensorExporter:
                 ow.set_sensor_callback_configuration(True)
                 ow.register_callback(ow.CALLBACK_SENSOR_DATA, self.callback)
                 self.sensor = ow
+                self.set_led()
 
     # Callback handles reconnection of IP Connection
     def cb_connected(self, connected_reason):
@@ -77,6 +79,18 @@ class OutdoorSensorExporter:
         # may have been offline and the configuration may be lost.
         # In this case we don't care for the reason of the connection
         self.ipcon.enumerate()
+
+    def set_led(self):
+        if self.led_config == 'off':
+            new_state = BrickletOutdoorWeather.STATUS_LED_CONFIG_OFF
+        elif self.led_config == 'on':
+            new_state = BrickletOutdoorWeather.STATUS_LED_CONFIG_ON
+        elif self.led_config == 'heartbeat':
+            new_state = BrickletOutdoorWeather.STATUS_LED_CONFIG_SHOW_HEARTBEAT
+        elif self.led_config == 'status':
+            new_state = BrickletOutdoorWeather.STATUS_LED_CONFIG_SHOW_STATUS
+        if self.sensor is not None:
+            self.sensor.set_status_led_config(new_state)
 
 
 # Callback function for sensor data callback
@@ -127,6 +141,7 @@ def parse_args():
     parser.add_argument("--influxdb-database", default=os.getenv("INFLUXDB_DATABASE", "default"))
     parser.add_argument("--influxdb-ssl", default=True)
     parser.add_argument("--influxdb-insecure", default=False, action='store_true')
+    parser.add_argument("--led", choices=['on', 'off', 'heartbeat', 'status'], default='status')
     parser.add_argument("--ip", help='brickd or master extension ip', required=True)
     parser.add_argument("--port", default=4223, type=int)
     return parser.parse_args()
@@ -145,7 +160,7 @@ if __name__ == "__main__":
         client = InfluxDBClient(args.influxdb_host, args.influxdb_port, args.influxdb_user, args.influxdb_password,
                                 args.influxdb_database, ssl=args.influxdb_ssl, verify_ssl=not args.influxdb_insecure)
 
-    exporter = OutdoorSensorExporter(args.ip, args.port, cb_sensor_data)
+    exporter = OutdoorSensorExporter(args.ip, args.port, args.led, cb_sensor_data)
 
     signal.pthread_sigmask(signal.SIG_BLOCK, [signal.SIGINT, signal.SIGHUP, signal.SIGTERM])
     signal.sigwait([signal.SIGINT, signal.SIGHUP, signal.SIGTERM])
